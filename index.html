@@ -1,0 +1,1226 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="theme-color" content="#070a18"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Dice Quiz"/>
+  <link rel="manifest" href="./manifest.webmanifest"/>
+  <link rel="icon" href="./icon-192.png" sizes="192x192" type="image/png"/>
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png"/>
+  <title>Dice Quiz Board</title>
+  <style>
+    :root{
+      --text:#eef1ff;
+      --muted:#b8c0ea;
+      --panel: rgba(15, 20, 45, .72);
+      --panel2: rgba(12, 16, 36, .78);
+      --stroke: rgba(255,255,255,.14);
+      --shadow: 0 18px 48px rgba(0,0,0,.45);
+      --accent: #7c5cff;
+      --good: #2ee59d;
+      --bad: #ff4d6d;
+    }
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#070a18;color:var(--text);}
+    .app{
+      height:100%;
+      display:grid;
+      grid-template-rows:auto 1fr;
+    }
+
+    header{
+      position:sticky;top:0;z-index:10;
+      display:flex;gap:12px;align-items:center;justify-content:space-between;
+      padding:12px 14px;
+      background:linear-gradient(180deg, rgba(12,16,36,.92), rgba(12,16,36,.65));
+      border-bottom:1px solid rgba(255,255,255,.08);
+      backdrop-filter: blur(10px);
+    }
+    .title{font-weight:900;letter-spacing:.2px}
+    .sub{font-size:13px;color:var(--muted)}
+    .left{display:flex;flex-direction:column;gap:4px}
+    .right{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+
+    .pill{
+      display:flex;gap:8px;align-items:center;
+      padding:8px 10px;border-radius:999px;
+      background:rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.10);
+      box-shadow: var(--shadow);
+      font-size:13px;
+    }
+    .pill b{font-size:14px}
+
+    .btn{
+      cursor:pointer; user-select:none;
+      border:none; color:white;
+      padding:10px 12px; border-radius:12px;
+      font-weight:800; box-shadow: var(--shadow);
+      background:linear-gradient(180deg, rgba(124,92,255,1), rgba(92,66,220,1));
+      transition:.15s transform ease, .15s opacity ease;
+      display:inline-flex;gap:8px;align-items:center;justify-content:center;
+      touch-action:manipulation;
+    }
+    .btn:hover{transform: translateY(-1px)}
+    .btn:active{transform: translateY(0)}
+    .btn.secondary{
+      background:rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.10);
+      box-shadow:none;
+      color:var(--text);
+    }
+    .btn.danger{
+      background:linear-gradient(180deg, rgba(255,77,109,1), rgba(220,55,85,1));
+    }
+    .btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
+
+    /* Board */
+    .stage{
+      position:relative;
+      overflow:hidden;
+    }
+    .bg{
+      position:absolute;inset:0;
+      background-image:
+        linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,.70)),
+        url("https://images.unsplash.com/photo-1520975916090-3105956dac38?auto=format&fit=crop&w=2000&q=80");
+      background-size: cover;
+      background-position: center;
+      filter: saturate(1.05);
+      transform: scale(1.02);
+      pointer-events:none;
+    }
+    .boardWrap{
+      position:absolute; inset:0;
+      display:grid;
+      place-items:center;
+      padding:16px;
+      z-index:1;
+    }
+    .board{
+      position:relative;
+      width:min(1000px, 100%);
+      aspect-ratio: 16 / 9;
+      background: linear-gradient(180deg, rgba(15,20,45,.40), rgba(10,12,28,.55));
+      border:1px solid rgba(255,255,255,.10);
+      border-radius: 26px;
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .board::after{
+      content:"";
+      position:absolute; inset:0;
+      background:
+        radial-gradient(circle at 20% 30%, rgba(124,92,255,.18), transparent 55%),
+        radial-gradient(circle at 80% 70%, rgba(46,229,157,.14), transparent 55%);
+      pointer-events:none;
+    }
+
+    /* Paths (SVG sits under nodes) */
+    svg.path{
+      position:absolute; inset:0;
+      width:100%; height:100%;
+      opacity:.85;
+    }
+
+    /* Nodes */
+    .node{
+      position:absolute;
+      width:42px; height:42px;
+      border-radius:999px;
+      transform: translate(-50%, -50%);
+      display:grid;
+      place-items:center;
+      font-weight:900;
+      color:rgba(255,255,255,.92);
+      background: rgba(255,255,255,.10);
+      border:1px solid rgba(255,255,255,.18);
+      box-shadow: 0 10px 26px rgba(0,0,0,.35);
+      backdrop-filter: blur(8px);
+      touch-action:manipulation;
+    }
+    .node.active{
+      background: rgba(124,92,255,.22);
+      border-color: rgba(124,92,255,.55);
+      box-shadow: 0 0 0 8px rgba(124,92,255,.16), 0 12px 28px rgba(0,0,0,.45);
+    }
+    .node.done{
+      background: rgba(46,229,157,.16);
+      border-color: rgba(46,229,157,.55);
+      color: rgba(235,255,248,.96);
+    }
+
+    /* Player token */
+    .token{
+      position:absolute;
+      width:22px;height:22px;border-radius:999px;
+      transform: translate(-50%, -50%);
+      background: rgba(46,229,157,1);
+      border:2px solid rgba(255,255,255,.85);
+      box-shadow: 0 0 0 8px rgba(46,229,157,.18), 0 16px 28px rgba(0,0,0,.45);
+      z-index:5;
+      transition: left .18s ease, top .18s ease;
+    }
+
+    /* Bottom HUD */
+    .hud{
+      position:absolute; left:16px; right:16px; bottom:16px;
+      z-index:20;
+      display:flex; gap:12px; flex-wrap:wrap; align-items:stretch; justify-content:space-between;
+    }
+    .card{
+      flex:1 1 320px;
+      padding:12px;
+      background: var(--panel);
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:18px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+      display:flex; gap:12px; align-items:center; justify-content:space-between;
+    }
+    .card .meta{display:flex;flex-direction:column;gap:3px}
+    .label{font-size:12px;color:var(--muted)}
+    .value{font-size:14px;font-weight:900}
+
+    .diceBox{
+      display:flex; gap:12px; align-items:center; justify-content:flex-end; flex-wrap:wrap;
+    }
+    .dice{
+      width:54px;height:54px;border-radius:14px;
+      display:grid;place-items:center;
+      background: rgba(255,255,255,.10);
+      border:1px solid rgba(255,255,255,.18);
+      box-shadow: 0 12px 26px rgba(0,0,0,.35);
+      font-weight:1000;
+      font-size:22px;
+    }
+    .rollOverlay{
+      position:fixed; inset:0;
+      display:flex; align-items:center; justify-content:center;
+      background: rgba(3,7,19,.76);
+      backdrop-filter: blur(4px);
+      opacity:0;
+      visibility:hidden;
+      transition: opacity .22s ease, visibility .22s ease;
+      z-index:1400;
+      pointer-events:none;
+    }
+    .rollOverlay.show{
+      opacity:1;
+      visibility:visible;
+      pointer-events:auto;
+    }
+    .rollScene{
+      width:min(48vw, 230px);
+      aspect-ratio:1/1;
+      display:grid;
+      place-items:center;
+      perspective:900px;
+      position:relative;
+    }
+    .rollGlow{
+      position:absolute;
+      width:82%;
+      height:22%;
+      border-radius:50%;
+      background: radial-gradient(ellipse at center, rgba(0,0,0,.45), rgba(0,0,0,0));
+      transform: translateY(78px);
+      filter: blur(2px);
+    }
+    .realDice{
+      --dice-size:min(28vw, 120px);
+      position:relative;
+      width:var(--dice-size);
+      height:var(--dice-size);
+      transform-style:preserve-3d;
+      will-change:transform;
+    }
+    .face{
+      position:absolute; inset:0;
+      border-radius:16px;
+      background: linear-gradient(145deg, #ffffff, #dce4ff);
+      border:1px solid rgba(18,24,50,.14);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.86),
+        inset 0 -8px 18px rgba(0,0,0,.09),
+        0 10px 26px rgba(0,0,0,.35);
+      display:grid;
+      place-items:center;
+      backface-visibility:hidden;
+    }
+    .face-front{ transform: rotateY(0deg) translateZ(calc(var(--dice-size) / 2)); }
+    .face-back{ transform: rotateY(180deg) translateZ(calc(var(--dice-size) / 2)); }
+    .face-right{ transform: rotateY(90deg) translateZ(calc(var(--dice-size) / 2)); }
+    .face-left{ transform: rotateY(-90deg) translateZ(calc(var(--dice-size) / 2)); }
+    .face-top{ transform: rotateX(90deg) translateZ(calc(var(--dice-size) / 2)); }
+    .face-bottom{ transform: rotateX(-90deg) translateZ(calc(var(--dice-size) / 2)); }
+    .pips{
+      width:72%;
+      height:72%;
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      grid-template-rows:repeat(3,1fr);
+      align-items:center;
+      justify-items:center;
+    }
+    .pips span{
+      width:14px;
+      height:14px;
+      border-radius:50%;
+      opacity:0;
+      transform: scale(.7);
+    }
+    .pips span.on{
+      opacity:1;
+      transform: scale(1);
+      background:#1a213f;
+      box-shadow: inset 0 1px 1px rgba(255,255,255,.35), 0 1px 2px rgba(0,0,0,.35);
+    }
+    @media (max-width:560px){
+      .realDice{ --dice-size:min(36vw, 100px); }
+      .rollGlow{ transform: translateY(64px); }
+      .face{ border-radius:14px; }
+      .pips span{ width:12px; height:12px; }
+    }
+
+    /* Modal */
+    .modalOverlay{
+      position:fixed; inset:0;
+      display:none; align-items:center; justify-content:center;
+      background: rgba(0,0,0,.60);
+      z-index:1000;
+      padding:16px;
+    }
+    .modal{
+      width:min(760px, 100%);
+      background: linear-gradient(180deg, rgba(15,20,45,.95), rgba(10,12,28,.95));
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:22px;
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .modalHeader{
+      padding:14px 16px;
+      display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
+      border-bottom:1px solid rgba(255,255,255,.10);
+    }
+    .modalHeader h2{margin:0;font-size:16px}
+    .modalHeader .meta{margin-top:6px;font-size:12px;color:var(--muted)}
+    .x{
+      width:40px;height:40px;border-radius:12px;
+      background: rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.12);
+      color:var(--text);
+      cursor:pointer;
+      display:grid;place-items:center;
+    }
+    .modalBody{padding:14px 16px;display:grid;gap:12px}
+    .qText{font-size:15px;line-height:1.4}
+    .answers{display:grid;gap:10px}
+    .ans{
+      text-align:left;
+      padding:12px 12px;
+      border-radius:16px;
+      background: rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.10);
+      cursor:pointer;
+      color:var(--text);
+      font-weight:800;
+      transition:.15s transform ease, .15s background ease, .15s border ease;
+      touch-action:manipulation;
+    }
+    .ans:hover{transform: translateY(-1px); background: rgba(255,255,255,.08)}
+    .ans.correct{border-color: rgba(46,229,157,.65); background: rgba(46,229,157,.14)}
+    .ans.wrong{border-color: rgba(255,77,109,.65); background: rgba(255,77,109,.12)}
+    .hint{
+      display:none;
+      padding:10px 12px;
+      border-radius:14px;
+      background: rgba(255,255,255,.05);
+      border:1px solid rgba(255,255,255,.08);
+      color:var(--muted);
+      font-size:13px;
+    }
+    .modalFooter{
+      padding:14px 16px;
+      display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;
+      border-top:1px solid rgba(255,255,255,.10);
+    }
+
+    .toast{
+      position:fixed; top:16px; left:50%; transform:translateX(-50%);
+      display:none;
+      padding:10px 12px;
+      border-radius:14px;
+      background: rgba(15,20,45,.92);
+      border:1px solid rgba(255,255,255,.12);
+      box-shadow: var(--shadow);
+      z-index:2000;
+      min-width:260px;
+      text-align:center;
+      backdrop-filter: blur(10px);
+    }
+    .jsNotice{
+      margin:12px;
+      padding:10px 12px;
+      border-radius:12px;
+      background:rgba(255,77,109,.16);
+      border:1px solid rgba(255,77,109,.45);
+      color:#ffdbe2;
+      font-size:13px;
+      line-height:1.35;
+    }
+
+    @media (max-width:980px){
+      .app{
+        height:auto;
+        min-height:100vh;
+        min-height:100svh;
+        display:flex;
+        flex-direction:column;
+      }
+      header{
+        position:static;
+        flex-direction:column;
+        align-items:stretch;
+        gap:10px;
+        padding:12px;
+      }
+      .right{
+        justify-content:flex-start;
+        gap:8px;
+      }
+      .stage{
+        flex:1 1 auto;
+        overflow:visible;
+      }
+      .bg{
+        position:fixed;
+        inset:0;
+        transform:none;
+      }
+      .boardWrap{
+        position:relative;
+        inset:auto;
+        display:block;
+        padding:12px 12px 8px;
+      }
+      .board{
+        width:100%;
+        aspect-ratio:auto;
+        height:48vh;
+        min-height:280px;
+        max-height:430px;
+        border-radius:20px;
+      }
+      .hud{
+        position:relative;
+        left:auto;
+        right:auto;
+        bottom:auto;
+        padding:0 12px 12px;
+        gap:10px;
+      }
+      .card{
+        flex:1 1 auto;
+        border-radius:16px;
+      }
+    }
+    @media (max-width:680px){
+      .title{font-size:18px}
+      .sub{font-size:12px;line-height:1.35}
+      .pill{
+        padding:7px 9px;
+        font-size:12px;
+      }
+      .pill b{font-size:13px}
+      .right > *{
+        flex:1 1 calc(50% - 6px);
+        min-width:0;
+        justify-content:center;
+      }
+      #btnReset{
+        flex-basis:100%;
+      }
+      .boardWrap{
+        padding:10px 10px 6px;
+      }
+      .board{
+        height:46vh;
+        min-height:260px;
+        max-height:360px;
+        border-radius:16px;
+      }
+      .node{
+        width:34px;
+        height:34px;
+        font-size:12px;
+      }
+      .token{
+        width:18px;
+        height:18px;
+        box-shadow:0 0 0 6px rgba(46,229,157,.20), 0 10px 20px rgba(0,0,0,.4);
+      }
+      .hud{
+        padding:0 10px calc(10px + env(safe-area-inset-bottom,0px));
+      }
+      .card{
+        padding:10px;
+        flex-direction:column;
+        align-items:stretch;
+        gap:10px;
+      }
+      .diceBox{
+        width:100%;
+        justify-content:space-between;
+        gap:8px;
+      }
+      .dice{
+        width:48px;
+        height:48px;
+        border-radius:12px;
+        font-size:20px;
+      }
+      .diceBox .btn{
+        flex:1 1 auto;
+        min-width:0;
+      }
+      .modalOverlay{padding:10px}
+      .modal{
+        border-radius:16px;
+      }
+      .modalHeader,.modalBody,.modalFooter{
+        padding:12px;
+      }
+      .x{
+        width:36px;
+        height:36px;
+      }
+      .toast{
+        top:calc(10px + env(safe-area-inset-top,0px));
+        left:10px;
+        right:10px;
+        transform:none;
+        min-width:0;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="jsNotice" id="jsNotice">
+  JavaScript не запустился. Открой страницу в Safari/Chrome (не в режиме предпросмотра файла).
+</div>
+<div class="app">
+  <header>
+    <div class="left">
+      <div class="title">🎲 Dice Quiz Board</div>
+      <div class="sub">Бросай кубик → идёшь столько кружков → отвечаешь на случайный вопрос</div>
+    </div>
+    <div class="right">
+      <div class="pill">⭐ Очки: <b id="score">0</b></div>
+      <div class="pill">🧩 Позиция: <b id="pos">1</b></div>
+      <div class="pill">🏁 Финиш: <b id="finish">0</b></div>
+      <button class="btn secondary" id="btnReset">↺ Сброс</button>
+    </div>
+  </header>
+
+  <div class="stage">
+    <div class="bg"></div>
+
+    <div class="boardWrap">
+      <div class="board" id="board">
+        <svg class="path" id="pathSvg" viewBox="0 0 1000 562" preserveAspectRatio="none"></svg>
+        <div class="token" id="token"></div>
+        <!-- nodes inserted by JS -->
+      </div>
+    </div>
+
+    <div class="hud">
+      <div class="card">
+        <div class="meta">
+          <div class="label">Ход</div>
+          <div class="value" id="turnText">Брось кубик</div>
+          <div class="label" id="targetText">—</div>
+        </div>
+
+        <div class="diceBox">
+          <div class="dice" id="dice">—</div>
+          <button class="btn" id="btnRoll">🎲 Бросить</button>
+          <button class="btn secondary" id="btnQuestion" disabled>❓ Вопрос</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Roll Overlay -->
+<div class="rollOverlay" id="rollOverlay" aria-hidden="true">
+  <div class="rollScene" aria-label="Dice rolling animation">
+    <div class="rollGlow"></div>
+    <div class="realDice" id="realDice" role="img" aria-label="Rolling dice">
+      <div class="face face-front" data-face="1"><div class="pips"></div></div>
+      <div class="face face-back" data-face="6"><div class="pips"></div></div>
+      <div class="face face-right" data-face="2"><div class="pips"></div></div>
+      <div class="face face-left" data-face="5"><div class="pips"></div></div>
+      <div class="face face-top" data-face="3"><div class="pips"></div></div>
+      <div class="face face-bottom" data-face="4"><div class="pips"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Quiz Modal -->
+<div class="modalOverlay" id="modalOverlay" aria-hidden="true">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modalHeader">
+      <div>
+        <h2 id="modalTitle">Вопрос</h2>
+        <div class="meta" id="modalMeta">—</div>
+      </div>
+      <button class="x" id="btnClose">✕</button>
+    </div>
+    <div class="modalBody">
+      <div class="qText" id="qText">—</div>
+      <div class="answers" id="answers"></div>
+      <div class="hint" id="hint"></div>
+    </div>
+    <div class="modalFooter">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn secondary" id="btnHint">💡 Подсказка</button>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn" id="btnContinue" disabled>✅ Продолжить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+window.__APP_BOOT_OK__ = false;
+/* =========================================================
+   НАСТРОЙКИ ИГРЫ (самое важное — легко менять)
+   ========================================================= */
+
+/**
+ * Позиции кружков (в процентах относительно поля)
+ * Чтобы “переделать” маршрут — просто поправь x/y или добавь новые узлы.
+ */
+const BOARD_NODES = [
+  { id: 1, x: 8,  y: 78, label: "1" },
+  { id: 2, x: 16, y: 68, label: "2" },
+  { id: 3, x: 26, y: 62, label: "3" },
+  { id: 4, x: 36, y: 58, label: "4" },
+  { id: 5, x: 46, y: 50, label: "5" },
+  { id: 6, x: 56, y: 44, label: "6" },
+  { id: 7, x: 66, y: 40, label: "7" },
+  { id: 8, x: 76, y: 46, label: "8" },
+  { id: 9, x: 84, y: 56, label: "9" },
+  { id: 10,x: 90, y: 70, label: "10" },
+  { id: 11,x: 82, y: 82, label: "11" },
+  { id: 12,x: 70, y: 84, label: "12" },
+  { id: 13,x: 58, y: 82, label: "13" },
+  { id: 14,x: 46, y: 80, label: "14" },
+  { id: 15,x: 34, y: 84, label: "15" },
+];
+
+/**
+ * Банк вопросов (можно менять/добавлять)
+ * Сейчас вопросы случайные из массива.
+ */
+const QUESTION_BANK = [
+  {
+    text: "Сколько будет 9 + 7?",
+    answers: ["14", "16", "17", "18"],
+    correctIndex: 1,
+    hint: "9 + 7 = 10 + 6"
+  },
+  {
+    text: "Какая планета ближе всего к Солнцу?",
+    answers: ["Венера", "Меркурий", "Марс", "Юпитер"],
+    correctIndex: 1,
+    hint: "Самая маленькая из классических планет."
+  },
+  {
+    text: "Какой язык используют для разметки веб-страниц?",
+    answers: ["HTML", "Python", "SQL", "C#"],
+    correctIndex: 0,
+    hint: "Начинается на H."
+  },
+  {
+    text: "Столица Италии?",
+    answers: ["Милан", "Неаполь", "Рим", "Флоренция"],
+    correctIndex: 2,
+    hint: "Город Колизея."
+  },
+  {
+    text: "Сколько сторон у треугольника?",
+    answers: ["2", "3", "4", "5"],
+    correctIndex: 1,
+    hint: "Название подсказывает."
+  },
+  {
+    text: "Что измеряют в герцах (Hz)?",
+    answers: ["Скорость", "Частоту", "Температуру", "Давление"],
+    correctIndex: 1,
+    hint: "Это про колебания."
+  },
+];
+
+/**
+ * Очки
+ */
+const SCORING = {
+  correct: +20,
+  wrong: -5
+};
+
+/* =========================================================
+   ЛОГИКА ИГРЫ
+   ========================================================= */
+
+const STORAGE_KEY = "dice_quiz_board_v1";
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return null;
+    const s = JSON.parse(raw);
+    if(typeof s.pos !== "number" || typeof s.score !== "number") return null;
+    return s;
+  }catch(_err){ return null; }
+}
+function saveState(s){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+  }catch(_err){
+    // localStorage may be blocked in some mobile preview modes
+  }
+}
+
+function defaultState(){
+  return {
+    pos: 0,                 // индекс в BOARD_NODES (0 = старт на 1-й)
+    score: 0,
+    turn: 1,
+    lastRoll: null,
+    awaitingQuestion: false, // start with dice roll, no auto question
+    usedQuestions: []       // чтобы реже повторялись (можно убрать)
+  };
+}
+
+let state = loadState() || defaultState();
+
+const $ = (id) => document.getElementById(id);
+const boardEl = $("board");
+const tokenEl = $("token");
+const scoreEl = $("score");
+const posEl = $("pos");
+const finishEl = $("finish");
+const diceEl = $("dice");
+const turnTextEl = $("turnText");
+const targetTextEl = $("targetText");
+const btnRoll = $("btnRoll");
+const btnQuestion = $("btnQuestion");
+const btnReset = $("btnReset");
+const rollOverlay = $("rollOverlay");
+const realDiceEl = $("realDice");
+
+const overlay = $("modalOverlay");
+const btnClose = $("btnClose");
+const qText = $("qText");
+const answersWrap = $("answers");
+const hintEl = $("hint");
+const btnHint = $("btnHint");
+const btnContinue = $("btnContinue");
+const modalTitle = $("modalTitle");
+const modalMeta = $("modalMeta");
+
+const toastEl = $("toast");
+
+const FACE_ROTATION = Object.freeze({
+  1: { x: 0,   y: 0 },
+  2: { x: 0,   y: -90 },
+  3: { x: -90, y: 0 },
+  4: { x: 90,  y: 0 },
+  5: { x: 0,   y: 90 },
+  6: { x: 0,   y: 180 }
+});
+const FACE_PIPS = Object.freeze({
+  1: [5],
+  2: [1, 9],
+  3: [1, 5, 9],
+  4: [1, 3, 7, 9],
+  5: [1, 3, 5, 7, 9],
+  6: [1, 3, 4, 6, 7, 9]
+});
+
+const FINISH_INDEX = BOARD_NODES.length - 1;
+finishEl.textContent = (FINISH_INDEX + 1).toString();
+
+let moving = false;
+let diceAnimating = false;
+let dicePose = { x: 0, y: 0, z: 0 };
+let currentQuestion = null;
+let answeredCorrect = false;
+
+function toast(msg){
+  toastEl.textContent = msg;
+  toastEl.style.display = "block";
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=> toastEl.style.display = "none", 1700);
+}
+
+function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
+
+function setCubeTransform(x, y, z){
+  if(!realDiceEl) return;
+  realDiceEl.style.transform = `rotateX(${x}deg) rotateY(${y}deg) rotateZ(${z}deg)`;
+}
+
+function showRollOverlay(){
+  if(!rollOverlay) return;
+  rollOverlay.classList.add("show");
+  rollOverlay.setAttribute("aria-hidden", "false");
+}
+
+function hideRollOverlay(){
+  if(!rollOverlay) return;
+  rollOverlay.classList.remove("show");
+  rollOverlay.setAttribute("aria-hidden", "true");
+}
+
+function initRealDiceFaces(){
+  if(!realDiceEl) return;
+
+  const faces = Array.from(realDiceEl.querySelectorAll(".face"));
+  faces.forEach((face) => {
+    const value = Number(face.dataset.face || "1");
+    const active = new Set(FACE_PIPS[value] || FACE_PIPS[1]);
+    const pips = face.querySelector(".pips");
+    if(!pips) return;
+
+    pips.innerHTML = "";
+    for(let cell = 1; cell <= 9; cell++){
+      const dot = document.createElement("span");
+      if(active.has(cell)) dot.classList.add("on");
+      pips.appendChild(dot);
+    }
+  });
+
+  setCubeTransform(dicePose.x, dicePose.y, dicePose.z);
+}
+
+function toBoardPx(node){
+  // board size in px
+  const r = boardEl.getBoundingClientRect();
+  return {
+    left: (node.x / 100) * r.width,
+    top:  (node.y / 100) * r.height
+  };
+}
+
+/* ---------- Rendering nodes and path ---------- */
+
+function renderPath(){
+  const svg = $("pathSvg");
+  svg.innerHTML = "";
+
+  // Convert nodes to SVG coords (viewBox 1000x562)
+  const pts = BOARD_NODES.map(n => ({ x: n.x * 10, y: n.y * 5.62 })); // because 1000/100 and 562/100
+
+  // Path line
+  const d = pts.map((p,i)=> (i===0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`)).join(" ");
+  const path = document.createElementNS("http://www.w3.org/2000/svg","path");
+  path.setAttribute("d", d);
+  path.setAttribute("fill","none");
+  path.setAttribute("stroke","rgba(255,255,255,.22)");
+  path.setAttribute("stroke-width","3");
+  path.setAttribute("stroke-linecap","round");
+  path.setAttribute("stroke-linejoin","round");
+  svg.appendChild(path);
+
+  // Glow overlay
+  const glow = document.createElementNS("http://www.w3.org/2000/svg","path");
+  glow.setAttribute("d", d);
+  glow.setAttribute("fill","none");
+  glow.setAttribute("stroke","rgba(124,92,255,.22)");
+  glow.setAttribute("stroke-width","10");
+  glow.setAttribute("stroke-linecap","round");
+  glow.setAttribute("stroke-linejoin","round");
+  svg.appendChild(glow);
+}
+
+function renderNodes(){
+  // remove old nodes
+  boardEl.querySelectorAll(".node").forEach(n => n.remove());
+
+  BOARD_NODES.forEach((node, idx) => {
+    const div = document.createElement("div");
+    div.className = "node";
+    div.textContent = (node.label !== undefined && node.label !== null) ? node.label : String(node.id);
+
+    const { left, top } = toBoardPx(node);
+    div.style.left = left + "px";
+    div.style.top  = top + "px";
+
+    if(idx === state.pos) div.classList.add("active");
+    if(idx < state.pos) div.classList.add("done");
+
+    // Click opens question only if we are awaiting question on THIS node
+    div.addEventListener("click", () => {
+      if(state.awaitingQuestion && idx === state.pos){
+        openQuestion();
+      } else {
+        toast("Сначала брось кубик или ответь на вопрос 👀");
+      }
+    });
+
+    boardEl.appendChild(div);
+  });
+
+  placeTokenInstant();
+}
+
+function placeTokenInstant(){
+  const node = BOARD_NODES[state.pos];
+  const { left, top } = toBoardPx(node);
+  tokenEl.style.left = left + "px";
+  tokenEl.style.top  = top + "px";
+}
+
+function updateHUD(){
+  scoreEl.textContent = String(state.score);
+  posEl.textContent = String(state.pos + 1);
+
+  if(state.pos >= FINISH_INDEX){
+    turnTextEl.textContent = "Финиш! 🎉";
+    targetTextEl.textContent = "Нажми «Сброс», чтобы сыграть снова.";
+    diceEl.textContent = "🏁";
+    btnRoll.disabled = true;
+    btnQuestion.disabled = true;
+    return;
+  }
+
+  if(state.awaitingQuestion){
+    turnTextEl.textContent = `Ход ${state.turn}: ответь на вопрос`;
+    targetTextEl.textContent = "Нажми «Вопрос» или кликни активный кружок.";
+    btnRoll.disabled = true;
+    btnQuestion.disabled = false;
+  } else {
+    turnTextEl.textContent = `Ход ${state.turn}: бросай кубик`;
+    targetTextEl.textContent = "Выпадет число — пройдёшь столько кружков.";
+    btnRoll.disabled = false;
+    btnQuestion.disabled = true;
+  }
+
+  diceEl.textContent = state.lastRoll == null ? "—" : String(state.lastRoll);
+}
+
+function hardReset(){
+  if(!confirm("Сбросить прогресс?")) return;
+  state = defaultState();
+  saveState(state);
+  answeredCorrect = false;
+  currentQuestion = null;
+  renderPath();
+  renderNodes();
+  updateHUD();
+  toast("Сброшено. Играем!");
+}
+
+/* ---------- Dice + movement ---------- */
+
+async function rollDice(){
+  if(moving || diceAnimating) return;
+  if(state.awaitingQuestion) return;
+
+  const roll = 1 + Math.floor(Math.random()*6);
+  state.lastRoll = roll;
+  saveState(state);
+
+  await animateDiceRoll(roll);
+
+  const from = state.pos;
+  const to = clamp(from + roll, 0, FINISH_INDEX);
+
+  if(to === from){
+    toast("Ты уже на месте 🙂");
+    state.awaitingQuestion = true;
+    saveState(state);
+    updateHUD();
+    openQuestion();
+    return;
+  }
+
+  await moveStepByStep(from, to);
+}
+
+async function animateDiceRoll(finalValue){
+  diceAnimating = true;
+  btnRoll.disabled = true;
+
+  if(!realDiceEl || !rollOverlay){
+    diceEl.textContent = String(finalValue);
+    diceAnimating = false;
+    return;
+  }
+
+  showRollOverlay();
+
+  const face = FACE_ROTATION[finalValue] || FACE_ROTATION[1];
+  const spins = {
+    x: 720 + Math.floor(Math.random() * 3) * 180,
+    y: 900 + Math.floor(Math.random() * 3) * 180,
+    z: 360 + Math.floor(Math.random() * 2) * 180
+  };
+  const target = {
+    x: face.x + spins.x,
+    y: face.y + spins.y,
+    z: spins.z
+  };
+
+  realDiceEl.style.transition = "none";
+  setCubeTransform(dicePose.x, dicePose.y, dicePose.z);
+  void realDiceEl.offsetWidth;
+
+  realDiceEl.style.transition = "transform 1.15s cubic-bezier(.14,.78,.2,1)";
+  setCubeTransform(target.x, target.y, target.z);
+
+  await wait(1220);
+
+  dicePose = { x: face.x, y: face.y, z: 0 };
+  realDiceEl.style.transition = "none";
+  setCubeTransform(dicePose.x, dicePose.y, dicePose.z);
+
+  diceEl.textContent = String(finalValue);
+  await wait(120);
+
+  hideRollOverlay();
+  diceAnimating = false;
+}
+
+async function moveStepByStep(_fromIdx, toIdx){
+  moving = true;
+  btnRoll.disabled = true;
+
+  // One direct move to the target node, without intermediate stops.
+  const targetNode = BOARD_NODES[toIdx];
+  const { left, top } = toBoardPx(targetNode);
+  tokenEl.style.transition = "left .55s cubic-bezier(.2,.75,.2,1), top .55s cubic-bezier(.2,.75,.2,1)";
+  tokenEl.style.left = left + "px";
+  tokenEl.style.top = top + "px";
+  await wait(560);
+
+  state.pos = toIdx;
+  state.awaitingQuestion = true;
+  state.turn += 1;
+  saveState(state);
+  renderNodes();
+  tokenEl.style.transition = "";
+
+  moving = false;
+  updateHUD();
+  toast("Landed! Question");
+  openQuestion();
+}
+
+function wait(ms){ return new Promise(res => setTimeout(res, ms)); }
+
+/* ---------- Questions ---------- */
+
+function pickRandomQuestion(){
+  // Чтобы реже повторялось — выкидываем недавно использованные
+  const used = new Set(state.usedQuestions);
+  const candidates = QUESTION_BANK
+    .map((q, i) => ({ q, i }))
+    .filter(x => !used.has(x.i));
+
+  let chosen;
+  if(candidates.length > 0){
+    chosen = candidates[Math.floor(Math.random() * candidates.length)];
+  } else {
+    // все использованы — начинаем заново
+    state.usedQuestions = [];
+    saveState(state);
+    chosen = { q: QUESTION_BANK[Math.floor(Math.random()*QUESTION_BANK.length)], i: null };
+  }
+
+  if(chosen.i != null){
+    state.usedQuestions.push(chosen.i);
+    // ограничим память использованных (чтобы не росло бесконечно)
+    state.usedQuestions = state.usedQuestions.slice(-50);
+    saveState(state);
+  }
+
+  return chosen.q;
+}
+
+function openQuestion(){
+  if(state.pos >= FINISH_INDEX){
+    // на финише тоже можно спросить, но сейчас просто победа
+    return;
+  }
+  if(!state.awaitingQuestion) return;
+
+  answeredCorrect = false;
+  btnContinue.disabled = true;
+  hintEl.style.display = "none";
+  hintEl.textContent = "";
+
+  currentQuestion = pickRandomQuestion();
+
+  modalTitle.textContent = `Вопрос (клетка ${state.pos + 1})`;
+  modalMeta.textContent = `Очки: ${state.score} • Ход: ${state.turn}`;
+
+  qText.textContent = currentQuestion.text;
+  answersWrap.innerHTML = "";
+
+  // перемешаем ответы, сохранив индекс правильного
+  const idxs = currentQuestion.answers.map((_,i)=>i);
+  shuffle(idxs);
+
+  idxs.forEach(originalIndex => {
+    const b = document.createElement("button");
+    b.className = "ans";
+    b.textContent = currentQuestion.answers[originalIndex];
+    b.addEventListener("click", () => chooseAnswer(b, originalIndex));
+    answersWrap.appendChild(b);
+  });
+
+  overlay.style.display = "flex";
+  overlay.setAttribute("aria-hidden", "false");
+}
+
+function closeQuestion(){
+  overlay.style.display = "none";
+  overlay.setAttribute("aria-hidden", "true");
+}
+
+function chooseAnswer(btnEl, chosenOriginalIndex){
+  if(!currentQuestion) return;
+
+  const all = Array.from(document.querySelectorAll(".ans"));
+  all.forEach(b => b.disabled = true);
+
+  const correct = chosenOriginalIndex === currentQuestion.correctIndex;
+  btnEl.classList.add(correct ? "correct" : "wrong");
+
+  // подсветим правильный (если ошибся)
+  if(!correct){
+    const correctText = currentQuestion.answers[currentQuestion.correctIndex];
+    const correctBtn = all.find(b => b.textContent === correctText);
+    if(correctBtn) correctBtn.classList.add("correct");
+  }
+
+  if(correct){
+    state.score += SCORING.correct;
+    answeredCorrect = true;
+    btnContinue.disabled = false;
+    toast(`Верно! +${SCORING.correct}`);
+  } else {
+    state.score += SCORING.wrong;
+    toast(`Неверно. ${SCORING.wrong}`);
+    // можно не закрывать — пусть жмёт "Продолжить" только при правильном
+    btnContinue.disabled = true;
+  }
+
+  saveState(state);
+  updateHUD();
+}
+
+function continueAfterQuestion(){
+  if(!answeredCorrect) return;
+
+  closeQuestion();
+
+  // После правильного ответа — разрешаем бросок кубика
+  state.awaitingQuestion = false;
+  state.lastRoll = null;
+  saveState(state);
+
+  renderNodes();
+  updateHUD();
+
+  if(state.pos >= FINISH_INDEX){
+    toast("Ты победил! 🎉");
+  } else {
+    toast("Теперь бросай кубик 🎲");
+  }
+}
+
+/* ---------- Utils ---------- */
+function shuffle(arr){
+  for(let i = arr.length-1; i>0; i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/* ---------- Events ---------- */
+btnRoll.addEventListener("click", rollDice);
+btnQuestion.addEventListener("click", openQuestion);
+btnReset.addEventListener("click", hardReset);
+
+btnClose.addEventListener("click", closeQuestion);
+overlay.addEventListener("click", (e)=>{ if(e.target === overlay) closeQuestion(); });
+
+btnHint.addEventListener("click", ()=>{
+  if(!currentQuestion) return;
+  hintEl.textContent = currentQuestion.hint || "Подсказки нет 🙂";
+  hintEl.style.display = "block";
+});
+
+btnContinue.addEventListener("click", continueAfterQuestion);
+
+window.addEventListener("keydown", (e)=>{
+  if(e.key === "Escape" && overlay.style.display === "flex") closeQuestion();
+});
+
+/* ---------- Init ---------- */
+function init(){
+  window.__APP_BOOT_OK__ = true;
+  const jsNoticeEl = $("jsNotice");
+  if(jsNoticeEl) jsNoticeEl.style.display = "none";
+
+  // Migrate old saves where turn 1 started with a forced question.
+  if(state.pos === 0 && state.turn === 1 && state.awaitingQuestion){
+    state.awaitingQuestion = false;
+    state.lastRoll = null;
+    saveState(state);
+  }
+
+  initRealDiceFaces();
+  renderPath();
+  renderNodes();
+  updateHUD();
+}
+window.addEventListener("resize", ()=>{ renderPath(); renderNodes(); });
+init();
+
+if("serviceWorker" in navigator){
+  window.addEventListener("load", function(){
+    navigator.serviceWorker.register("./service-worker.js").catch(function(){
+      // no-op
+    });
+  });
+}
+</script>
+<script>
+(function(){
+  // If main script failed to parse/execute, keep the warning visible.
+  var n = document.getElementById("jsNotice");
+  if(!n) return;
+  if(window.__APP_BOOT_OK__){
+    n.style.display = "none";
+  } else {
+    n.style.display = "block";
+  }
+})();
+</script>
+</body>
+</html>
