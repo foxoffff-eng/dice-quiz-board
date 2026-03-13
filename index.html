@@ -230,6 +230,31 @@
       transform: translateY(78px);
       filter: blur(2px);
     }
+    .rollValue{
+      position:absolute;
+      top:10px;
+      left:50%;
+      transform:translateX(-50%) translateY(-4px);
+      min-width:44px;
+      text-align:center;
+      padding:6px 10px;
+      border-radius:999px;
+      background:rgba(7,10,24,.72);
+      border:1px solid rgba(255,255,255,.18);
+      font-weight:900;
+      font-size:18px;
+      letter-spacing:.3px;
+      color:var(--text);
+      box-shadow: 0 8px 20px rgba(0,0,0,.35);
+      pointer-events:none;
+      z-index:4;
+      opacity:0;
+      transition: opacity .14s ease, transform .14s ease;
+    }
+    .rollValue.show{
+      opacity:1;
+      transform:translateX(-50%) translateY(0);
+    }
     .realDice{
       --dice-size:min(28vw, 120px);
       position:relative;
@@ -560,6 +585,7 @@
 <div class="rollOverlay" id="rollOverlay" aria-hidden="true">
   <div class="rollScene" aria-label="Dice rolling animation">
     <div class="rollGlow"></div>
+    <div class="rollValue" id="rollValue">1</div>
     <div class="realDice" id="realDice" role="img" aria-label="Rolling dice">
       <div class="face face-front" data-face="1"><div class="pips"></div></div>
       <div class="face face-back" data-face="6"><div class="pips"></div></div>
@@ -592,6 +618,28 @@
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
         <button class="btn" id="btnContinue" disabled>✅ Продолжить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modalOverlay" id="finishOverlay" aria-hidden="true">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="finishTitle">
+    <div class="modalHeader">
+      <div>
+        <h2 id="finishTitle">Финиш!</h2>
+        <div class="meta">Игра завершена</div>
+      </div>
+    </div>
+    <div class="modalBody">
+      <div class="qText" id="finishText">Ты дошёл до конца поля.</div>
+    </div>
+    <div class="modalFooter">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn secondary" id="btnFinishClose">Закрыть</button>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn" id="btnFinishReset">Играть снова</button>
       </div>
     </div>
   </div>
@@ -832,7 +880,7 @@ function defaultState(){
   };
 }
 
-let state = loadState() || defaultState();
+let state = defaultState();
 
 const $ = (id) => document.getElementById(id);
 const boardEl = $("board");
@@ -848,6 +896,7 @@ const btnQuestion = $("btnQuestion");
 const btnReset = $("btnReset");
 const rollOverlay = $("rollOverlay");
 const realDiceEl = $("realDice");
+const rollValueEl = $("rollValue");
 
 const overlay = $("modalOverlay");
 const btnClose = $("btnClose");
@@ -858,6 +907,10 @@ const btnHint = $("btnHint");
 const btnContinue = $("btnContinue");
 const modalTitle = $("modalTitle");
 const modalMeta = $("modalMeta");
+const finishOverlay = $("finishOverlay");
+const finishText = $("finishText");
+const btnFinishClose = $("btnFinishClose");
+const btnFinishReset = $("btnFinishReset");
 
 const toastEl = $("toast");
 
@@ -886,6 +939,7 @@ let diceAnimating = false;
 let dicePose = { x: 0, y: 0, z: 0 };
 let currentQuestion = null;
 let answeredCorrect = false;
+let finishModalShown = false;
 
 function toast(msg){
   toastEl.textContent = msg;
@@ -909,6 +963,10 @@ function showRollOverlay(){
 
 function hideRollOverlay(){
   if(!rollOverlay) return;
+  if(rollValueEl){
+    rollValueEl.classList.remove("show");
+    rollValueEl.textContent = "";
+  }
   rollOverlay.classList.remove("show");
   rollOverlay.setAttribute("aria-hidden", "true");
 }
@@ -1043,6 +1101,9 @@ function updateHUD(){
     diceEl.textContent = "🏁";
     btnRoll.disabled = true;
     btnQuestion.disabled = true;
+    if(!finishModalShown){
+      openFinishModal();
+    }
     return;
   }
 
@@ -1067,6 +1128,8 @@ function hardReset(){
   saveState(state);
   answeredCorrect = false;
   currentQuestion = null;
+  finishModalShown = false;
+  closeFinishModal();
   renderPath();
   renderNodes();
   updateHUD();
@@ -1079,30 +1142,25 @@ async function rollDice(){
   if(moving || diceAnimating) return;
   if(state.awaitingQuestion) return;
 
-  const roll = 1 + Math.floor(Math.random()*6);
+  const maxRoll = Math.min(6, FINISH_INDEX - state.pos);
+  if(maxRoll <= 0) return;
+  const roll = 1 + Math.floor(Math.random() * maxRoll);
   state.lastRoll = roll;
   saveState(state);
 
   await animateDiceRoll(roll);
 
   const from = state.pos;
-  const to = clamp(from + roll, 0, FINISH_INDEX);
-
-  if(to === from){
-    toast("Ты уже на месте 🙂");
-    state.awaitingQuestion = true;
-    saveState(state);
-    updateHUD();
-    openQuestion();
-    return;
-  }
-
-  await moveStepByStep(from, to);
+  await moveStepByStep(from, roll);
 }
 
 async function animateDiceRoll(finalValue){
   diceAnimating = true;
   btnRoll.disabled = true;
+  if(rollValueEl){
+    rollValueEl.classList.remove("show");
+    rollValueEl.textContent = "";
+  }
 
   if(!realDiceEl || !rollOverlay){
     diceEl.textContent = String(finalValue);
@@ -1114,9 +1172,10 @@ async function animateDiceRoll(finalValue){
 
   const face = FACE_ROTATION[finalValue] || FACE_ROTATION[1];
   const spins = {
-    x: 720 + Math.floor(Math.random() * 3) * 180,
-    y: 900 + Math.floor(Math.random() * 3) * 180,
-    z: 360 + Math.floor(Math.random() * 2) * 180
+    // Only full turns so animation ends on the true rolled face without a final jump.
+    x: 720 + Math.floor(Math.random() * 3) * 360,
+    y: 720 + Math.floor(Math.random() * 3) * 360,
+    z: 360 + Math.floor(Math.random() * 2) * 360
   };
   const target = {
     x: face.x + spins.x,
@@ -1137,27 +1196,36 @@ async function animateDiceRoll(finalValue){
   realDiceEl.style.transition = "none";
   setCubeTransform(dicePose.x, dicePose.y, dicePose.z);
 
+  if(rollValueEl){
+    rollValueEl.textContent = String(finalValue);
+    rollValueEl.classList.add("show");
+  }
   diceEl.textContent = String(finalValue);
-  await wait(120);
+  await wait(1760);
 
   hideRollOverlay();
   diceAnimating = false;
 }
 
-async function moveStepByStep(_fromIdx, toIdx){
+async function moveStepByStep(fromIdx, rolledValue){
   moving = true;
   btnRoll.disabled = true;
 
-  // One direct move to the target node, without intermediate stops.
-  const targetNode = BOARD_NODES[toIdx];
-  const { left, top } = toBoardPx(targetNode);
-  tokenEl.style.transition = "left .55s cubic-bezier(.2,.75,.2,1), top .55s cubic-bezier(.2,.75,.2,1)";
-  tokenEl.style.left = left + "px";
-  tokenEl.style.top = top + "px";
-  await wait(560);
+  const safeRoll = clamp(Number(rolledValue) || 0, 1, 6);
+  const steps = Math.min(safeRoll, FINISH_INDEX - fromIdx);
+  const toIdx = fromIdx + steps;
+  tokenEl.style.transition = "left .24s cubic-bezier(.2,.75,.2,1), top .24s cubic-bezier(.2,.75,.2,1)";
+
+  for(let i = 1; i <= steps; i++){
+    const nextNode = BOARD_NODES[fromIdx + i];
+    const { left, top } = toBoardPx(nextNode);
+    tokenEl.style.left = left + "px";
+    tokenEl.style.top = top + "px";
+    await wait(250);
+  }
 
   state.pos = toIdx;
-  state.awaitingQuestion = true;
+  state.awaitingQuestion = state.pos < FINISH_INDEX;
   state.turn += 1;
   saveState(state);
   renderNodes();
@@ -1165,7 +1233,14 @@ async function moveStepByStep(_fromIdx, toIdx){
 
   moving = false;
   updateHUD();
-  toast("Landed! Question");
+
+  if(state.pos >= FINISH_INDEX){
+    toast("Финиш! 🎉");
+    openFinishModal();
+    return;
+  }
+
+  toast(`Кубик: ${rolledValue}. Переход на ${steps} клеток.`);
   openQuestion();
 }
 
@@ -1241,32 +1316,42 @@ function closeQuestion(){
   overlay.setAttribute("aria-hidden", "true");
 }
 
+function openFinishModal(){
+  if(!finishOverlay) return;
+  finishModalShown = true;
+  if(finishText){
+    finishText.textContent = `Ты на финише! Итоговые очки: ${state.score}.`;
+  }
+  finishOverlay.style.display = "flex";
+  finishOverlay.setAttribute("aria-hidden", "false");
+}
+
+function closeFinishModal(){
+  if(!finishOverlay) return;
+  finishOverlay.style.display = "none";
+  finishOverlay.setAttribute("aria-hidden", "true");
+}
+
 function chooseAnswer(btnEl, chosenOriginalIndex){
-  if(!currentQuestion) return;
+  if(!currentQuestion || btnEl.disabled) return;
 
   const all = Array.from(document.querySelectorAll(".ans"));
-  all.forEach(b => b.disabled = true);
-
   const correct = chosenOriginalIndex === currentQuestion.correctIndex;
-  btnEl.classList.add(correct ? "correct" : "wrong");
-
-  // подсветим правильный (если ошибся)
-  if(!correct){
-    const correctText = currentQuestion.answers[currentQuestion.correctIndex];
-    const correctBtn = all.find(b => b.textContent === correctText);
-    if(correctBtn) correctBtn.classList.add("correct");
-  }
 
   if(correct){
+    btnEl.classList.add("correct");
+    all.forEach(b => b.disabled = true);
     state.score += SCORING.correct;
     answeredCorrect = true;
     btnContinue.disabled = false;
     toast(`Верно! +${SCORING.correct}`);
   } else {
+    btnEl.classList.add("wrong");
+    btnEl.disabled = true;
     state.score += SCORING.wrong;
-    toast(`Неверно. ${SCORING.wrong}`);
-    // можно не закрывать — пусть жмёт "Продолжить" только при правильном
+    answeredCorrect = false;
     btnContinue.disabled = true;
+    toast(`Неверно. ${SCORING.wrong}. Попробуй другой вариант.`);
   }
 
   saveState(state);
@@ -1288,6 +1373,7 @@ function continueAfterQuestion(){
 
   if(state.pos >= FINISH_INDEX){
     toast("Ты победил! 🎉");
+    openFinishModal();
   } else {
     toast("Теперь бросай кубик 🎲");
   }
@@ -1317,9 +1403,15 @@ btnHint.addEventListener("click", ()=>{
 });
 
 btnContinue.addEventListener("click", continueAfterQuestion);
+if(btnFinishClose) btnFinishClose.addEventListener("click", closeFinishModal);
+if(btnFinishReset) btnFinishReset.addEventListener("click", hardReset);
+if(finishOverlay){
+  finishOverlay.addEventListener("click", (e)=>{ if(e.target === finishOverlay) closeFinishModal(); });
+}
 
 window.addEventListener("keydown", (e)=>{
   if(e.key === "Escape" && overlay.style.display === "flex") closeQuestion();
+  if(e.key === "Escape" && finishOverlay && finishOverlay.style.display === "flex") closeFinishModal();
 });
 
 /* ---------- Init ---------- */
@@ -1328,12 +1420,11 @@ function init(){
   const jsNoticeEl = $("jsNotice");
   if(jsNoticeEl) jsNoticeEl.style.display = "none";
 
-  // Migrate old saves where turn 1 started with a forced question.
-  if(state.pos === 0 && state.turn === 1 && state.awaitingQuestion){
-    state.awaitingQuestion = false;
-    state.lastRoll = null;
-    saveState(state);
-  }
+  // Always start from the first cell on each fresh page load.
+  state = defaultState();
+  finishModalShown = false;
+  closeFinishModal();
+  saveState(state);
 
   initRealDiceFaces();
   renderPath();
@@ -1345,7 +1436,7 @@ init();
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", function(){
-    navigator.serviceWorker.register("./service-worker.js?v=3").then(function(reg){
+    navigator.serviceWorker.register("./service-worker.js?v=9").then(function(reg){
       reg.update();
     }).catch(function(){
       // no-op
